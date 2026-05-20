@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sloppy Bowljobs - Bowling Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0F0F23;--card:#1A1A2E;--surface:#16162A;
+  --accent1:#00D4FF;--accent2:#FF6B35;--positive:#00E676;
+  --negative:#FF5252;--text:#FFFFFF;--muted:#8888AA;
+  --border:#3A3A5C;--warn:#FFD700;
+  --matt:#00D4FF;--brandon:#FF6B35;--caleb:#00E676;--roman:#FFD700;--shane:#E040FB;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',-apple-system,sans-serif;min-height:100vh}
+a{color:var(--accent1);text-decoration:none}
+
+/* Tab Navigation */
+.tab-nav{display:flex;gap:4px;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.tab-btn{padding:10px 20px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:8px 8px 0 0;font-size:14px;font-weight:600;transition:all .2s;white-space:nowrap}
+.tab-btn:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.tab-btn.active{color:var(--accent1);background:var(--card);border-bottom:2px solid var(--accent1)}
+
+/* Page containers */
+.page{display:none;padding:20px;max-width:1400px;margin:0 auto}
+.page.active{display:block}
+.page-mobile.active{display:flex;flex-direction:column;align-items:center}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px}
+.kpi-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.kpi-value{font-size:28px;font-weight:700}
+.kpi-sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* Header */
+.season-header{text-align:center;margin-bottom:24px}
+.season-header h1{font-size:32px;margin-bottom:4px}
+.season-header .subtitle{color:var(--muted);font-size:14px}
+
+/* Win streak dots */
+.streak-dots{display:flex;gap:6px;justify-content:center;margin:16px 0}
+.streak-dot{width:16px;height:16px;border-radius:50%}
+.streak-dot.w{background:var(--positive)}
+.streak-dot.l{background:var(--negative)}
+
+/* Roster cards */
+.roster-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.roster-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden}
+.roster-card .accent-bar{position:absolute;top:0;left:0;right:0;height:3px}
+.roster-card .name{font-size:18px;font-weight:700;margin:8px 0 12px}
+.roster-stat{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.roster-stat .label{color:var(--muted)}
+
+/* Chart containers */
+.chart-container{position:relative;width:100%;margin-bottom:20px}
+.chart-container canvas{width:100%!important}
+
+/* Bowler selector pills */
+.pill-group{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.pill{padding:8px 18px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.pill:hover{border-color:var(--text);color:var(--text)}
+.pill.active{color:#fff}
+
+/* Toggle group */
+.toggle-group{display:flex;gap:4px;margin-bottom:16px}
+.toggle-btn{padding:6px 16px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;border-radius:6px;transition:all .2s}
+.toggle-btn.active{background:var(--accent1);color:#000;border-color:var(--accent1)}
+
+/* Tables */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:10px 12px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.data-table td{padding:8px 12px;border-bottom:1px solid rgba(58,58,92,.4)}
+.data-table tr:hover{background:rgba(255,255,255,.03)}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cell-good{color:var(--positive);font-weight:600}
+.cell-bad{color:var(--negative);font-weight:600}
+.cell-win{color:var(--positive)}
+.cell-loss{color:var(--negative)}
+
+/* Page 2 stat cards */
+.stat-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.stat-card .val{font-size:24px;font-weight:700;margin:4px 0}
+.stat-card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase}
+
+/* Progress bars */
+.progress-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.progress-label{width:60px;font-size:13px;color:var(--muted);flex-shrink:0}
+.progress-bar-bg{flex:1;height:24px;background:var(--surface);border-radius:6px;overflow:hidden;position:relative}
+.progress-bar-fill{height:100%;border-radius:6px;transition:width .4s}
+.progress-val{width:50px;text-align:right;font-size:14px;font-weight:600;flex-shrink:0}
+
+/* Page 3 mobile */
+#page-mobile{max-width:400px;width:100%}
+.mobile-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.mobile-kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.mobile-kpi .val{font-size:22px;font-weight:700}
+.mobile-kpi .lbl{font-size:10px;color:var(--muted);text-transform:uppercase}
+.trend-up{color:var(--positive)}
+.trend-down{color:var(--negative)}
+.mobile-log{max-height:400px;overflow-y:auto}
+
+/* Page 4 */
+.matchup-row{cursor:pointer;transition:background .2s}
+.matchup-row:hover{background:rgba(0,212,255,.08)!important}
+.matchup-row.selected{background:rgba(0,212,255,.12)!important}
+.callout-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.callout{border-radius:12px;padding:16px;text-align:center}
+.callout.nemesis{background:rgba(255,82,82,.15);border:1px solid rgba(255,82,82,.3)}
+.callout.dominate{background:rgba(0,230,118,.15);border:1px solid rgba(0,230,118,.3)}
+.callout .c-label{font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.callout .c-team{font-size:16px;font-weight:700}
+
+/* Page 5 H2H */
+.h2h-selectors{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.h2h-selectors .vs{font-size:24px;font-weight:700;color:var(--muted)}
+.dumbbell-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;font-size:13px}
+.dumbbell-label{width:110px;color:var(--muted);text-align:right;flex-shrink:0}
+.dumbbell-bar{flex:1;height:28px;background:var(--surface);border-radius:14px;position:relative}
+.dumbbell-marker{position:absolute;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;border:2px solid var(--card)}
+.dumbbell-line{position:absolute;top:50%;height:4px;transform:translateY(-50%);border-radius:2px;background:var(--border)}
+.dumbbell-val{width:40px;font-size:12px;font-weight:600;flex-shrink:0}
+.h2h-dot-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:16px 0}
+.h2h-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700}
+
+/* Filter bar */
+.filter-bar{display:flex;gap:12px;justify-content:center;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.filter-select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;min-width:160px}
+.filter-select:focus{outline:none;border-color:var(--accent1)}
+.filter-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* Misc */
+.section-title{font-size:18px;font-weight:700;margin-bottom:12px;color:var(--text)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:768px){
+  .two-col{grid-template-columns:1fr}
+  .card-grid{grid-template-columns:repeat(2,1fr)}
+  .tab-btn{padding:8px 12px;font-size:12px}
+}
+@media(max-width:480px){
+  .card-grid{grid-template-columns:1fr}
+  .page{padding:12px}
+}
+</style>
+</head>
+<body>
+
+<nav class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('overview')">Season Overview</button>
+  <button class="tab-btn" onclick="switchTab('player')">Player Deep Dive</button>
+  <button class="tab-btn" onclick="switchTab('mobile')">Quick Stats</button>
+  <button class="tab-btn" onclick="switchTab('comparison')">Team Comparison</button>
+  <button class="tab-btn" onclick="switchTab('h2h')">Head to Head</button>
+</nav>
+
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+  <div style="font-size:20px;font-weight:700;color:var(--accent1)">Loading data from Google Sheets...</div>
+  <div style="font-size:13px;color:var(--muted)" id="loading-status">Fetching bowler data</div>
+</div>
+
+<!-- PAGE 1: SEASON OVERVIEW -->
+<div id="page-overview" class="page active">
+  <div class="filter-bar" id="overview-filters"></div>
+  <div class="season-header">
+    <h1 id="team-name">Sloppy Bowljobs</h1>
+    <div class="subtitle" id="league-subtitle">Railroaders 8332 &bull; Bowlero Lakewood</div>
+    <div class="subtitle" id="season-subtitle">2025-26 Season &bull; Weeks 1-28</div>
+    <div class="streak-dots" id="streak-dots"></div>
+    <button onclick="exportDataJSON()" style="margin-top:10px;padding:6px 16px;background:transparent;border:1px solid var(--accent1);color:var(--accent1);border-radius:6px;cursor:pointer;font-size:12px;transition:all .2s" onmouseover="this.style.background='var(--accent1)';this.style.color='var(--bg)'" onmouseout="this.style.background='transparent';this.style.color='var(--accent1)'">⬇ Export Data JSON</button>
+  </div>
+  <div class="card-grid" id="overview-kpis"></div>
+  <div class="section-title">Roster Overview</div>
+  <div class="roster-grid" id="roster-grid"></div>
+  <div class="card">
+    <div class="section-title">Team Score Trend</div>
+    <div class="chart-container"><canvas id="chartTeamTrend"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Bowler Contributions</div>
+    <div class="chart-container"><canvas id="chartContributions"></canvas></div>
+  </div>
+</div>
+
+<!-- PAGE 2: PLAYER DEEP DIVE -->
+<div id="page-player" class="page">
+  <div class="filter-bar" id="player-filters"></div>
+  <div class="section-title">Player Deep Dive</div>
+  <div class="pill-group" id="p2-pills"></div>
+  <div class="toggle-group" id="p2-weeks">
+    <button class="toggle-btn" data-n="4" onclick="setP2Weeks(4)">4 Weeks</button>
+    <button class="toggle-btn" data-n="8" onclick="setP2Weeks(8)">8 Weeks</button>
+    <button class="toggle-btn" data-n="12" onclick="setP2Weeks(12)">12 Weeks</button>
+    <button class="toggle-btn active" data-n="0" onclick="setP2Weeks(0)">All</button>
+  </div>
+  <div class="stat-cards" id="p2-stats"></div>
+  <div class="card">
+    <div class="section-title">Score Timeline</div>
+    <div class="chart-container"><canvas id="chartP2Timeline"></canvas></div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="section-title">Pins +/- Average</div>
+      <div class="chart-container"><canvas id="chartP2PlusMinus"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Game Averages</div>
+      <div id="p2-progress"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Game Log</div>
+    <div class="table-scroll" id="p2-gamelog"></div>
+  </div>
+</div>
+
+<!-- PAGE 3: MOBILE STATS -->
+<div id="page-mobile" class="page page-mobile">
+  <div style="width:100%;max-width:400px">
+    <div class="filter-bar" id="mobile-filters"></div>
+    <div class="section-title" style="text-align:center;margin-bottom:12px">Quick Stats</div>
+    <div class="pill-group" id="p3-pills" style="justify-content:center"></div>
+    <div class="toggle-group" id="p3-period" style="justify-content:center">
+      <button class="toggle-btn" data-n="3" onclick="setP3Period(3)">3wk</button>
+      <button class="toggle-btn" data-n="5" onclick="setP3Period(5)">5wk</button>
+      <button class="toggle-btn active" data-n="8" onclick="setP3Period(8)">8wk</button>
+      <button class="toggle-btn" data-n="0" onclick="setP3Period(0)">All</button>
+    </div>
+    <div class="mobile-kpi-grid" id="p3-kpis"></div>
+    <div class="card" style="padding:12px">
+      <div class="chart-container" style="height:180px"><canvas id="chartP3Spark"></canvas></div>
+    </div>
+    <div class="card mobile-log" style="margin-top:12px">
+      <div class="section-title" style="font-size:14px">Game Log</div>
+      <div class="table-scroll" id="p3-gamelog"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 4: TEAM COMPARISON -->
+<div id="page-comparison" class="page">
+  <div class="filter-bar" id="comparison-filters"></div>
+  <div class="season-header">
+    <h1 style="font-size:24px">Team Comparison</h1>
+    <div class="subtitle" id="p4-subtitle">Season 18-10 &bull; Win% 64% &bull; Avg Pins 2,260</div>
+  </div>
+  <div class="card">
+    <div class="section-title">Opponent Records</div>
+    <div class="chart-container"><canvas id="chartOppBars"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Matchup Summary</div>
+    <div class="table-scroll" id="p4-table"></div>
+  </div>
+  <div class="callout-grid" id="p4-callouts"></div>
+  <div class="card">
+    <div class="section-title">Weekly Performance <span id="p4-filter-label" style="font-size:13px;color:var(--muted)"></span></div>
+    <div class="chart-container"><canvas id="chartP4Weekly"></canvas></div>
+  </div>
+</div>
+
+<!-- PAGE 5: HEAD TO HEAD -->
+<div id="page-h2h" class="page">
+  <div class="filter-bar" id="h2h-filters"></div>
+  <div class="section-title">Head to Head</div>
+  <div class="h2h-selectors">
+    <div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">BOWLER A</div>
+      <div class="pill-group" id="h2h-pillsA"></div>
+    </div>
+    <div class="vs">VS</div>
+    <div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">BOWLER B</div>
+      <div class="pill-group" id="h2h-pillsB"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Weekly Matchup Record</div>
+    <div class="h2h-dot-row" id="h2h-dots"></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Stat Comparison</div>
+    <div id="h2h-dumbbells"></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Weekly Average Overlay</div>
+    <div class="chart-container"><canvas id="chartH2HOverlay"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Game Breakdown</div>
+    <div class="chart-container"><canvas id="chartH2HBreakdown"></canvas></div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+// CONFIGURATION — Update these values for your setup
+// =====================================================================
+const CONFIG = {
+  // To connect to Google Sheets:
+  // 1. Upload Bowling_Data_Template.xlsx to Google Sheets
+  // 2. Go to File > Share > Publish to web > Entire document > CSV
+  // 3. Copy the spreadsheet ID from the URL and paste it below
+  // 4. Set enabled to true
+  GOOGLE_SHEETS: {
+    enabled: true,
+    spreadsheetId: '1mCC5zXpIFjt4_ifPgr6dq0XJHg8j1fXm',
+  },
+  // Tab names must match exactly (these are the Google Sheet tab names)
+  BOWLER_TABS: [
+    { tab: 'Matt Hill', color: '#00D4FF' },
+    { tab: 'Brandon Lippincott', color: '#FF6B35' },
+    { tab: 'Caleb Hitsman', color: '#00E676' },
+    { tab: 'Roman Archuleta', color: '#FFD700' },
+    { tab: 'Shane Pelletier', color: '#E040FB' },
+  ],
+  // Team info (pulled from first row of data if available)
+  TEAM_NAME: 'Sloppy Bowljobs',
+  LEAGUE_INFO: 'Railroaders 8332 • Bowlero Lakewood',
+};
+
+// =====================================================================
+// DATA LAYER — fetched from Sheets or fallback to embedded
+// =====================================================================
+let weeklyData, allBowlers, opponentRecords, h2hStats, bowlerStats, mobileRecords;
+let selectedLeague = null;
+let selectedTeam = null;
+let activeBowlers = {};
+const POSITION_COLORS = ['#00D4FF', '#FF6B35', '#00E676', '#FFD700', '#E040FB', '#FF4081', '#7C4DFF', '#64FFDA'];
+
+// No embedded fallback — data loads from bowling_data.json or Google Sheets
+
+// ===== GOOGLE SHEETS FETCH + PARSE =====
+function sheetUrl(tabName) {
+  return `https://docs.google.com/spreadsheets/d/${CONFIG.GOOGLE_SHEETS.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
+}
+
+function parseLeaguePalsCSV(csvText, bowlerName) {
+  const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+  const rows = result.data;
+  const weeks = [];
+  for (const row of rows) {
+    const wk = parseInt(row['Wk']);
+    const g1 = parseInt(row['Gm1']) || 0;
+    const g2 = parseInt(row['Gm2']) || 0;
+    const g3 = parseInt(row['Gm3']) || 0;
+    const scratch = parseInt(row['Scratch Pins']) || (g1 + g2 + g3);
+    const avg = parseInt(row['Avg']) || 0;
+    const pm = parseInt(row['Pins +/- Avg']) || 0;
+    const opp = (row['Opponent'] || '').trim();
+    // Parse Score: "4 - 5" or "4                      -                     5"
+    const scoreRaw = (row['Score'] || '').replace(/\s+/g, ' ').trim();
+    const scoreParts = scoreRaw.split(/\s*-\s*/);
+    const us = parseInt(scoreParts[0]) || 0;
+    const them = parseInt(scoreParts[1]) || 0;
+    const res = us > them ? 'W' : us < them ? 'L' : 'T';
+    if (isNaN(wk)) continue;
+    weeks.push({ wk, g1, g2, g3, scratch, avg, pm, opp, res, score: `${us} - ${them}`,
+      center: (row['Center'] || '').trim(),
+      event: (row['Event'] || '').trim(),
+      team: (row['Team'] || '').trim(),
+    });
+  }
+  weeks.sort((a, b) => a.wk - b.wk);
+  return weeks;
+}
+
+function computeAllDerivedData() {
+  // Compute weeklyData from allBowlers
+  const weekMap = {};
+  for (const [name, b] of Object.entries(allBowlers)) {
+    const abbr = name.split(' ')[0];
+    for (const w of b.weeks) {
+      if (!weekMap[w.wk]) {
+        weekMap[w.wk] = { wk: w.wk, total: 0, opp: w.opp, score: w.score, res: w.res };
+      }
+      weekMap[w.wk][abbr] = w.scratch;
+      weekMap[w.wk].total += w.scratch;
+    }
+  }
+  weeklyData = Object.values(weekMap).sort((a, b) => a.wk - b.wk);
+  // Derive result and pts from the first bowler's data for each week
+  for (const w of weeklyData) {
+    // Find the score/result from any bowler who played that week
+    for (const [name, b] of Object.entries(allBowlers)) {
+      const bw = b.weeks.find(bw => bw.wk === w.wk);
+      if (bw && bw.score) {
+        w.pts = bw.score;
+        w.result = bw.res;
+        w.opp = bw.opp;
+        break;
+      }
+    }
+  }
+
+  // Compute opponentRecords
+  const oppMap = {};
+  for (const w of weeklyData) {
+    const opp = w.opp;
+    if (!oppMap[opp]) oppMap[opp] = { opp, w: 0, l: 0, matches: 0, totalPins: 0 };
+    oppMap[opp].matches++;
+    oppMap[opp].totalPins += w.total;
+    if (w.result === 'W') oppMap[opp].w++; else oppMap[opp].l++;
+  }
+  opponentRecords = Object.values(oppMap).map(o => ({
+    ...o,
+    avgPins: Math.round(o.totalPins / o.matches),
+    wPct: Math.round((o.w / o.matches) * 100),
+    bestPts: 'N/A'
+  })).sort((a, b) => b.wPct - a.wPct || b.avgPins - a.avgPins);
+
+  // Find best pts for each opponent
+  for (const rec of opponentRecords) {
+    const matchWeeks = weeklyData.filter(w => w.opp === rec.opp && w.result === 'W');
+    if (matchWeeks.length > 0) {
+      // Find the biggest win (highest us - them differential)
+      let best = matchWeeks[0];
+      for (const mw of matchWeeks) {
+        const parts = (mw.pts || '').split(' - ');
+        const bParts = (best.pts || '').split(' - ');
+        if ((parseInt(parts[0]) || 0) > (parseInt(bParts[0]) || 0)) best = mw;
+      }
+      rec.bestPts = best.pts || 'N/A';
+    }
+  }
+
+  // Compute h2hStats and bowlerStats from allBowlers
+  h2hStats = {};
+  bowlerStats = [];
+  for (const [name, b] of Object.entries(allBowlers)) {
+    const valid = b.weeks.filter(w => w.g1 > 0);
+    const allGames = valid.flatMap(w => [w.g1, w.g2, w.g3]);
+    const avg = allGames.length ? Math.round(allGames.reduce((a, g) => a + g, 0) / allGames.length) : 0;
+    const high = Math.max(...allGames, 0);
+    const hiSeries = Math.max(...valid.map(w => w.scratch), 0);
+    const g1avg = Math.round(valid.reduce((s, w) => s + w.g1, 0) / valid.length);
+    const g2avg = Math.round(valid.reduce((s, w) => s + w.g2, 0) / valid.length);
+    const g3avg = Math.round(valid.reduce((s, w) => s + w.g3, 0) / valid.length);
+    const over200 = allGames.filter(g => g >= 200).length;
+    const consistency = allGames.length > 0 ? Math.round(Math.sqrt(allGames.reduce((s, g) => s + (g - avg) ** 2, 0) / allGames.length)) : 0;
+    const clutch = g3avg - g1avg;
+    const totalPm = valid.reduce((s, w) => s + w.pm, 0);
+
+    h2hStats[name] = { avg, high, hiSeries, consistency, g1avg, g2avg, g3avg, over200, clutch };
+
+    // Trend: compare last 4 weeks avg to first 4 weeks avg
+    const last4 = valid.slice(-4);
+    const first4 = valid.slice(0, 4);
+    const l4g = last4.flatMap(w => [w.g1, w.g2, w.g3]);
+    const f4g = first4.flatMap(w => [w.g1, w.g2, w.g3]);
+    const l4avg = l4g.length ? Math.round(l4g.reduce((a, g) => a + g, 0) / l4g.length) : 0;
+    const f4avg = f4g.length ? Math.round(f4g.reduce((a, g) => a + g, 0) / f4g.length) : 0;
+    const trend = l4avg > f4avg + 3 ? 'up' : l4avg < f4avg - 3 ? 'down' : 'flat';
+
+    bowlerStats.push({
+      name, abbr: name.split(' ')[0], avg, high, hiSeries,
+      weeks: valid.length, color: b.color,
+      plusMinus: (totalPm >= 0 ? '+' : '') + totalPm,
+      trend
+    });
+  }
+
+  // Compute mobileRecords (W-L per bowler)
+  mobileRecords = {};
+  for (const [name, b] of Object.entries(allBowlers)) {
+    const wins = b.weeks.filter(w => w.res === 'W').length;
+    const losses = b.weeks.filter(w => w.res === 'L').length;
+    mobileRecords[name] = `${wins}-${losses}`;
+  }
+
+  // Update season subtitle dynamically
+  const maxWk = Math.max(...weeklyData.map(w => w.wk));
+  document.getElementById('season-subtitle').innerHTML = `2025-26 Season &bull; Weeks 1-${maxWk}`;
+
+  // Update header from first bowler's data if available
+  const firstBowler = Object.values(allBowlers)[0];
+  if (firstBowler && firstBowler.weeks.length > 0 && firstBowler.weeks[0].center) {
+    const center = firstBowler.weeks[0].center;
+    const event = firstBowler.weeks[0].event;
+    // Clean center name: "Bowlero Lakewood - 833" -> "Bowlero Lakewood"
+    const cleanCenter = center.includes('-') ? center.split('-')[0].trim() : center;
+    document.getElementById('league-subtitle').innerHTML = `${event} &bull; ${cleanCenter}`;
+  }
+
+  // Update comparison page subtitle
+  const wins = weeklyData.filter(w => w.result === 'W').length;
+  const losses = weeklyData.length - wins;
+  const winPct = Math.round((wins / weeklyData.length) * 100);
+  const avgPins = Math.round(weeklyData.reduce((s, w) => s + w.total, 0) / weeklyData.length);
+  const compSub = document.querySelector('#page-comparison .subtitle');
+  if (compSub) compSub.innerHTML = `Season ${wins}-${losses} &bull; Win% ${winPct}% &bull; Avg Pins ${avgPins.toLocaleString()}`;
+}
+
+function getAvailableLeagues() {
+  const leagues = new Set();
+  for (const b of Object.values(allBowlers)) {
+    for (const w of b.weeks) {
+      if (w.event) leagues.add(w.event);
+    }
+  }
+  return [...leagues].sort();
+}
+
+function getAvailableTeams(league) {
+  const teams = new Set();
+  for (const b of Object.values(allBowlers)) {
+    for (const w of b.weeks) {
+      if (league && w.event !== league) continue;
+      if (w.team) teams.add(w.team);
+    }
+  }
+  return [...teams].sort();
+}
+
+function applyFilters() {
+  activeBowlers = {};
+  let idx = 0;
+  for (const [name, b] of Object.entries(allBowlers)) {
+    let weeks = b.weeks;
+    if (selectedLeague) weeks = weeks.filter(w => w.event === selectedLeague);
+    if (selectedTeam) weeks = weeks.filter(w => w.team === selectedTeam);
+    if (weeks.length > 0) {
+      activeBowlers[name] = { color: POSITION_COLORS[idx % POSITION_COLORS.length], weeks };
+      idx++;
+    }
+  }
+  const savedAll = allBowlers;
+  allBowlers = activeBowlers;
+  computeAllDerivedData();
+  allBowlers = savedAll;
+
+  bowlerNames = Object.keys(activeBowlers);
+  if (bowlerNames.length > 0) {
+    if (!bowlerNames.includes(p2Bowler)) p2Bowler = bowlerNames[0];
+    if (!bowlerNames.includes(p3Bowler)) p3Bowler = bowlerNames[0];
+    if (!bowlerNames.includes(h2hA)) h2hA = bowlerNames[0];
+    if (!bowlerNames.includes(h2hB)) h2hB = bowlerNames.length > 1 ? bowlerNames[1] : bowlerNames[0];
+  }
+}
+
+function buildFilterBar(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const leagues = getAvailableLeagues();
+  const teams = getAvailableTeams(selectedLeague);
+
+  el.innerHTML = '<div>' +
+    '<div class="filter-label">League</div>' +
+    '<select class="filter-select" onchange="setLeague(this.value)">' +
+    '<option value="">All Leagues</option>' +
+    leagues.map(function(l) { return '<option value="' + l + '"' + (selectedLeague === l ? ' selected' : '') + '>' + l + '</option>'; }).join('') +
+    '</select></div><div>' +
+    '<div class="filter-label">Team</div>' +
+    '<select class="filter-select" onchange="setTeam(this.value)">' +
+    '<option value="">All Teams</option>' +
+    teams.map(function(t) { return '<option value="' + t + '"' + (selectedTeam === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+    '</select></div>';
+}
+
+function buildAllFilterBars() {
+  ['overview-filters', 'player-filters', 'mobile-filters', 'comparison-filters', 'h2h-filters'].forEach(function(id) { buildFilterBar(id); });
+}
+
+function setLeague(val) {
+  selectedLeague = val || null;
+  var teams = getAvailableTeams(selectedLeague);
+  if (selectedTeam && !teams.includes(selectedTeam)) selectedTeam = null;
+  applyFilters();
+  buildAllFilterBars();
+  rebuildCurrentPage();
+}
+
+function setTeam(val) {
+  selectedTeam = val || null;
+  applyFilters();
+  buildAllFilterBars();
+  rebuildCurrentPage();
+}
+
+function rebuildCurrentPage() {
+  var activePage = document.querySelector('.page.active');
+  if (!activePage) return;
+  var id = activePage.id;
+  if (id === 'page-overview') buildOverview();
+  else if (id === 'page-player') buildP2();
+  else if (id === 'page-mobile') buildP3();
+  else if (id === 'page-comparison') buildP4();
+  else if (id === 'page-h2h') buildH2H();
+}
+
+async function fetchFromGoogleSheets() {
+  const overlay = document.getElementById('loading-overlay');
+  overlay.style.display = 'flex';
+
+  const fetched = {};
+  let success = true;
+
+  for (let i = 0; i < CONFIG.BOWLER_TABS.length; i++) {
+    const { tab, color } = CONFIG.BOWLER_TABS[i];
+    document.getElementById('loading-status').textContent = `Fetching ${tab} (${i + 1}/${CONFIG.BOWLER_TABS.length})...`;
+    try {
+      const resp = await fetch(sheetUrl(tab));
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const csv = await resp.text();
+      const weeks = parseLeaguePalsCSV(csv, tab);
+      fetched[tab] = { color, weeks };
+    } catch (e) {
+      console.warn(`Failed to fetch ${tab}:`, e);
+      success = false;
+      break;
+    }
+  }
+
+  overlay.style.display = 'none';
+
+  if (success && Object.keys(fetched).length === CONFIG.BOWLER_TABS.length) {
+    allBowlers = fetched;
+    computeAllDerivedData();
+    console.log('Data loaded from Google Sheets');
+  } else {
+    console.warn('Falling back to bowling_data.json');
+    await useFallbackData();
+  }
+}
+
+async function useFallbackData() {
+  const overlay = document.getElementById('loading-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('loading-status').textContent = 'Loading fallback data...';
+  try {
+    const resp = await fetch('bowling_data.json');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    allBowlers = data;
+    computeAllDerivedData();
+    console.log('Data loaded from bowling_data.json');
+  } catch (e) {
+    console.error('Failed to load bowling_data.json:', e);
+    document.getElementById('loading-status').textContent = 'Error loading data. Make sure bowling_data.json is in the same folder.';
+    document.getElementById('loading-status').style.color = '#FF5252';
+    return;
+  }
+  overlay.style.display = 'none';
+}
+
+function exportDataJSON() {
+  const json = JSON.stringify(allBowlers, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'bowling_data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== GLOBALS =====
+let bowlerNames;
+let activeCharts = {};
+let p2Bowler = "Matt Hill", p2NWeeks = 0;
+let p3Bowler = "Matt Hill", p3Period = 8;
+let p4SelectedOpp = null;
+let h2hA = "Matt Hill", h2hB = "Roman Archuleta";
+
+const chartDefaults = {
+  color: '#8888AA',
+  borderColor: '#3A3A5C',
+  font: { family: "'Segoe UI',-apple-system,sans-serif" }
+};
+Chart.defaults.color = '#8888AA';
+Chart.defaults.borderColor = '#3A3A5C';
+Chart.defaults.font.family = "'Segoe UI',-apple-system,sans-serif";
+
+function destroyChart(id) {
+  if (activeCharts[id]) { activeCharts[id].destroy(); delete activeCharts[id]; }
+}
+function makeChart(id, config) {
+  destroyChart(id);
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  activeCharts[id] = new Chart(ctx, config);
+  return activeCharts[id];
+}
+
+// ===== TAB SWITCHING =====
+function switchTab(tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const pages = {overview:'page-overview',player:'page-player',mobile:'page-mobile',comparison:'page-comparison',h2h:'page-h2h'};
+  document.getElementById(pages[tab]).classList.add('active');
+  event.target.classList.add('active');
+  // Rebuild charts for the active tab
+  setTimeout(() => {
+    if (tab === 'overview') buildOverview();
+    else if (tab === 'player') buildP2();
+    else if (tab === 'mobile') buildP3();
+    else if (tab === 'comparison') buildP4();
+    else if (tab === 'h2h') buildH2H();
+  }, 50);
+}
+
+// ===== PAGE 1: SEASON OVERVIEW =====
+function buildOverview() {
+  // Streak dots (last 10)
+  const last10 = weeklyData.slice(-10);
+  const dotsEl = document.getElementById('streak-dots');
+  dotsEl.innerHTML = '<span style="font-size:11px;color:var(--muted);margin-right:8px">Last 10:</span>' +
+    last10.map(w => `<div class="streak-dot ${w.result.toLowerCase()}" title="Wk ${w.wk}: ${w.result} ${w.pts}"></div>`).join('');
+
+  // KPIs
+  const wins = weeklyData.filter(w => w.result === 'W').length;
+  const losses = weeklyData.length - wins;
+  const winPct = ((wins / weeklyData.length) * 100).toFixed(1);
+  const avgTotal = Math.round(weeklyData.reduce((s, w) => s + w.total, 0) / weeklyData.length);
+  // Compute team avg per bowler from h2hStats
+  const allAvgs = Object.values(h2hStats).map(s => s.avg);
+  const teamAvg = Math.round(allAvgs.reduce((a,b) => a+b, 0) / allAvgs.length);
+  // Find high series and who has it
+  const hiSeriesEntries = bowlerStats.map(b => ({ name: b.abbr, val: b.hiSeries }));
+  const maxHiSeries = Math.max(...hiSeriesEntries.map(e => e.val));
+  const hiSeriesNames = hiSeriesEntries.filter(e => e.val === maxHiSeries).map(e => e.name).join(' & ');
+
+  document.getElementById('overview-kpis').innerHTML = `
+    <div class="card"><div class="kpi-label">Season Record</div><div class="kpi-value">${wins} - ${losses}</div><div class="kpi-sub">${winPct}% Win Rate</div></div>
+    <div class="card"><div class="kpi-label">Team Avg / Bowler</div><div class="kpi-value">${teamAvg}</div><div class="kpi-sub">Across all bowlers</div></div>
+    <div class="card"><div class="kpi-label">High Series</div><div class="kpi-value">${maxHiSeries}</div><div class="kpi-sub">${hiSeriesNames}</div></div>
+    <div class="card"><div class="kpi-label">Avg Team Total</div><div class="kpi-value">${avgTotal.toLocaleString()}</div><div class="kpi-sub">Per week</div></div>
+  `;
+
+  // Team Score Trend chart
+  const runAvg = []; let runSum = 0;
+  weeklyData.forEach((w, i) => { runSum += w.total; runAvg.push(Math.round(runSum / (i + 1))); });
+  makeChart('chartTeamTrend', {
+    type: 'bar',
+    data: {
+      labels: weeklyData.map(w => 'Wk ' + w.wk),
+      datasets: [
+        {
+          label: 'Team Total',
+          data: weeklyData.map(w => w.total),
+          backgroundColor: weeklyData.map(w => w.result === 'W' ? 'rgba(0,230,118,.7)' : 'rgba(255,82,82,.7)'),
+          borderRadius: 4,
+          order: 2
+        },
+        {
+          label: 'Running Avg',
+          data: runAvg,
+          type: 'line',
+          borderColor: '#00D4FF',
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          borderWidth: 2,
+          tension: 0.3,
+          order: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { boxWidth: 12, padding: 16 } }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1 } },
+      scales: { y: { min: 1200, max: 3200, grid: { color: 'rgba(58,58,92,.5)' } }, x: { grid: { display: false } } }
+    }
+  });
+
+  // Bowler Contributions stacked bar
+  const bEntries = Object.entries(activeBowlers);
+  const bNames = bEntries.map(function(e) { return e[0].split(' ')[0]; });
+  const bColors = {};
+  bEntries.forEach(function(e) { bColors[e[0].split(' ')[0]] = e[1].color; });
+  makeChart('chartContributions', {
+    type: 'bar',
+    data: {
+      labels: weeklyData.map(w => 'Wk ' + w.wk),
+      datasets: bNames.map(n => ({
+        label: n,
+        data: weeklyData.map(w => w[n] || 0),
+        backgroundColor: bColors[n] + 'CC',
+        borderRadius: 2
+      }))
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { boxWidth: 12, padding: 16 } }, tooltip: { mode: 'index', backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1 } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: 'rgba(58,58,92,.5)' } } }
+    }
+  });
+
+  // Roster
+  const rg = document.getElementById('roster-grid');
+  rg.innerHTML = bowlerStats.map(b => {
+    const trendIcon = b.trend === 'up' ? '&#9650;' : (b.trend === 'down' ? '&#9660;' : '&#8212;');
+    const trendColor = b.trend === 'up' ? 'var(--positive)' : (b.trend === 'down' ? 'var(--negative)' : 'var(--muted)');
+    return `<div class="roster-card">
+      <div class="accent-bar" style="background:${b.color}"></div>
+      <div class="name" style="color:${b.color}">${b.name}</div>
+      <div class="roster-stat"><span class="label">AVG</span><span>${b.avg}</span></div>
+      <div class="roster-stat"><span class="label">HIGH</span><span>${b.high}</span></div>
+      <div class="roster-stat"><span class="label">HI SERIES</span><span>${b.hiSeries}</span></div>
+      <div class="roster-stat"><span class="label">+/-</span><span style="color:${trendColor}">${b.plusMinus} ${trendIcon}</span></div>
+      <div class="roster-stat"><span class="label">WEEKS</span><span>${b.weeks}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ===== PAGE 2: PLAYER DEEP DIVE =====
+function buildP2Pills() {
+  document.getElementById('p2-pills').innerHTML = bowlerNames.map(n => {
+    const c = activeBowlers[n].color;
+    const active = n === p2Bowler;
+    return `<button class="pill ${active ? 'active' : ''}" style="${active ? `background:${c};border-color:${c}` : `border-color:${c}40;color:${c}`}" onclick="setP2Bowler('${n}')">${n.split(' ')[0]}</button>`;
+  }).join('');
+}
+function setP2Bowler(name) { p2Bowler = name; buildP2(); }
+function setP2Weeks(n) {
+  p2NWeeks = n;
+  document.querySelectorAll('#p2-weeks .toggle-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.n) === n);
+  });
+  buildP2();
+}
+function buildP2() {
+  buildP2Pills();
+  const b = activeBowlers[p2Bowler];
+  const allW = b.weeks;
+  const weeks = p2NWeeks > 0 ? allW.slice(-p2NWeeks) : allW;
+
+  // Stats
+  const allGames = weeks.flatMap(w => [w.g1, w.g2, w.g3]);
+  const avg = Math.round(allGames.reduce((a, b) => a + b, 0) / allGames.length);
+  const highGame = Math.max(...allGames);
+  const highSeries = Math.max(...weeks.map(w => w.scratch));
+  const stdDev = Math.round(Math.sqrt(allGames.reduce((s, g) => s + (g - avg) ** 2, 0) / allGames.length));
+  const over200 = allGames.filter(g => g >= 200).length;
+  const g3avg = Math.round(weeks.reduce((s, w) => s + w.g3, 0) / weeks.length);
+  const g1avg = Math.round(weeks.reduce((s, w) => s + w.g1, 0) / weeks.length);
+  const clutch = g3avg - g1avg;
+
+  document.getElementById('p2-stats').innerHTML = `
+    <div class="stat-card"><div class="lbl">Last ${p2NWeeks || 'All'} Avg</div><div class="val" style="color:${b.color}">${avg}</div></div>
+    <div class="stat-card"><div class="lbl">High Game</div><div class="val">${highGame}</div></div>
+    <div class="stat-card"><div class="lbl">High Series</div><div class="val">${highSeries}</div></div>
+    <div class="stat-card"><div class="lbl">Consistency</div><div class="val">${stdDev}</div><div class="lbl">std dev</div></div>
+    <div class="stat-card"><div class="lbl">200+ Games</div><div class="val">${over200}</div></div>
+    <div class="stat-card"><div class="lbl">Clutch Factor</div><div class="val" style="color:${clutch >= 0 ? 'var(--positive)' : 'var(--negative)'}">${clutch > 0 ? '+' : ''}${clutch}</div></div>
+  `;
+
+  // Score Timeline
+  const rollingAvg = [];
+  let rSum = 0;
+  weeks.forEach((w, i) => {
+    rSum += (w.g1 + w.g2 + w.g3) / 3;
+    rollingAvg.push(Math.round(rSum / (i + 1)));
+  });
+  makeChart('chartP2Timeline', {
+    type: 'bar',
+    data: {
+      labels: weeks.map(w => 'Wk ' + w.wk),
+      datasets: [
+        { label: 'Gm 1', data: weeks.map(w => w.g1), backgroundColor: b.color + '99', borderRadius: 3 },
+        { label: 'Gm 2', data: weeks.map(w => w.g2), backgroundColor: b.color + '66', borderRadius: 3 },
+        { label: 'Gm 3', data: weeks.map(w => w.g3), backgroundColor: b.color + '33', borderRadius: 3 },
+        {
+          label: 'Rolling Avg', data: rollingAvg, type: 'line',
+          borderColor: '#FFD700', backgroundColor: 'transparent', pointRadius: 0, borderWidth: 2, tension: 0.3, order: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { boxWidth: 12 } },
+        tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1 },
+        annotation: undefined
+      },
+      scales: {
+        y: { min: 100, grid: { color: 'rgba(58,58,92,.5)' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Draw 200 reference line after chart renders
+  const timelineChart = activeCharts['chartP2Timeline'];
+  if (timelineChart) {
+    const origDraw = timelineChart.draw.bind(timelineChart);
+    timelineChart.draw = function() {
+      origDraw();
+      const yScale = this.scales.y;
+      const ctx = this.ctx;
+      const yPos = yScale.getPixelForValue(200);
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = '#FF5252AA';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(this.chartArea.left, yPos);
+      ctx.lineTo(this.chartArea.right, yPos);
+      ctx.stroke();
+      ctx.fillStyle = '#FF525299';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('200', this.chartArea.right + 4, yPos + 3);
+      ctx.restore();
+    };
+    timelineChart.draw();
+  }
+
+  // Pins +/- Average
+  const bowlerAvg = avg;
+  makeChart('chartP2PlusMinus', {
+    type: 'bar',
+    data: {
+      labels: weeks.map(w => 'Wk ' + w.wk),
+      datasets: [{
+        label: '+/- Avg',
+        data: weeks.map(w => w.pm),
+        backgroundColor: weeks.map(w => w.pm >= 0 ? 'rgba(0,230,118,.7)' : 'rgba(255,82,82,.7)'),
+        borderRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1 } },
+      scales: { y: { grid: { color: 'rgba(58,58,92,.5)' } }, x: { grid: { display: false } } }
+    }
+  });
+
+  // Game Averages progress bars
+  const ga1 = Math.round(weeks.reduce((s, w) => s + w.g1, 0) / weeks.length);
+  const ga2 = Math.round(weeks.reduce((s, w) => s + w.g2, 0) / weeks.length);
+  const ga3 = Math.round(weeks.reduce((s, w) => s + w.g3, 0) / weeks.length);
+  const maxGA = 280;
+  const clutchRating = ga3 - ga1;
+  document.getElementById('p2-progress').innerHTML = `
+    ${[['Gm 1', ga1], ['Gm 2', ga2], ['Gm 3', ga3]].map(([lbl, val]) => `
+      <div class="progress-row">
+        <div class="progress-label">${lbl}</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${(val/maxGA)*100}%;background:${b.color}"></div></div>
+        <div class="progress-val">${val}</div>
+      </div>
+    `).join('')}
+    <div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px">
+      Clutch Rating: <span style="color:${clutchRating >= 0 ? 'var(--positive)' : 'var(--negative)'}; font-weight:700">${clutchRating > 0 ? '+' : ''}${clutchRating}</span> (Gm3 - Gm1)
+    </div>
+  `;
+
+  // Game Log table
+  const rows = [...weeks].reverse();
+  document.getElementById('p2-gamelog').innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Wk</th><th>Gm1</th><th>Gm2</th><th>Gm3</th><th>Series</th><th>+/-</th><th>Opponent</th><th>Result</th></tr></thead>
+      <tbody>${rows.map(w => {
+        const gc = g => g >= 200 ? 'cell-good' : (g < 150 ? 'cell-bad' : '');
+        return `<tr>
+          <td>${w.wk}</td>
+          <td class="${gc(w.g1)}">${w.g1}</td>
+          <td class="${gc(w.g2)}">${w.g2}</td>
+          <td class="${gc(w.g3)}">${w.g3}</td>
+          <td style="font-weight:600">${w.scratch}</td>
+          <td class="${w.pm >= 0 ? 'cell-good' : 'cell-bad'}">${w.pm > 0 ? '+' : ''}${w.pm}</td>
+          <td>${w.opp}</td>
+          <td class="${w.res === 'W' ? 'cell-win' : 'cell-loss'}" style="font-weight:700">${w.res}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  `;
+}
+
+// ===== PAGE 3: MOBILE STATS =====
+function buildP3Pills() {
+  document.getElementById('p3-pills').innerHTML = bowlerNames.map(n => {
+    const c = activeBowlers[n].color;
+    const active = n === p3Bowler;
+    return `<button class="pill ${active ? 'active' : ''}" style="${active ? `background:${c};border-color:${c}` : `border-color:${c}40;color:${c}`}" onclick="setP3Bowler('${n}')">${n.split(' ')[0]}</button>`;
+  }).join('');
+}
+function setP3Bowler(name) { p3Bowler = name; buildP3(); }
+function setP3Period(n) {
+  p3Period = n;
+  document.querySelectorAll('#p3-period .toggle-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.n) === n);
+  });
+  buildP3();
+}
+function buildP3() {
+  buildP3Pills();
+  const b = activeBowlers[p3Bowler];
+  const allW = b.weeks;
+  const weeks = p3Period > 0 ? allW.slice(-p3Period) : allW;
+  const allGames = weeks.flatMap(w => [w.g1, w.g2, w.g3]);
+  const nAvg = Math.round(allGames.reduce((a, b) => a + b, 0) / allGames.length);
+  const seasonAvg = h2hStats[p3Bowler].avg;
+  const highGame = Math.max(...allGames);
+  const record = mobileRecords[p3Bowler];
+
+  // Trend: compare last period avg to previous period avg
+  const prevWeeks = p3Period > 0 && allW.length > p3Period ? allW.slice(-p3Period * 2, -p3Period) : [];
+  let trendArrow = '', trendClass = '';
+  if (prevWeeks.length > 0) {
+    const prevGames = prevWeeks.flatMap(w => [w.g1, w.g2, w.g3]);
+    const prevAvg = Math.round(prevGames.reduce((a, b) => a + b, 0) / prevGames.length);
+    if (nAvg > prevAvg) { trendArrow = ' &#9650;'; trendClass = 'trend-up'; }
+    else if (nAvg < prevAvg) { trendArrow = ' &#9660;'; trendClass = 'trend-down'; }
+  }
+
+  document.getElementById('p3-kpis').innerHTML = `
+    <div class="mobile-kpi"><div class="lbl">Last ${p3Period || 'All'} Avg</div><div class="val" style="color:${b.color}">${nAvg} <span class="${trendClass}" style="font-size:14px">${trendArrow}</span></div></div>
+    <div class="mobile-kpi"><div class="lbl">Season Avg</div><div class="val">${seasonAvg}</div></div>
+    <div class="mobile-kpi"><div class="lbl">High Game</div><div class="val">${highGame}</div></div>
+    <div class="mobile-kpi"><div class="lbl">Record</div><div class="val">${record}</div></div>
+  `;
+
+  // Sparkline
+  makeChart('chartP3Spark', {
+    type: 'line',
+    data: {
+      labels: weeks.map(w => w.wk),
+      datasets: [{
+        data: weeks.map(w => Math.round((w.g1 + w.g2 + w.g3) / 3)),
+        borderColor: b.color,
+        backgroundColor: b.color + '20',
+        fill: true,
+        pointRadius: 2,
+        borderWidth: 2,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { display: true, title: { display: true, text: 'Week #', color: '#8888AA', font: { size: 10 } }, ticks: { color: '#8888AA', font: { size: 9 } }, grid: { display: false } }, y: { display: true, title: { display: true, text: 'Score', color: '#8888AA', font: { size: 10 } }, ticks: { color: '#8888AA', font: { size: 9 } }, grid: { color: 'rgba(58,58,92,.3)' } } }
+    }
+  });
+
+  // Game log
+  const rows = [...weeks].reverse();
+  document.getElementById('p3-gamelog').innerHTML = `
+    <table class="data-table" style="font-size:11px">
+      <thead><tr><th>Wk</th><th>G1</th><th>G2</th><th>G3</th><th>Ser</th><th>Res</th></tr></thead>
+      <tbody>${rows.map(w => {
+        const gc = g => g >= 200 ? 'cell-good' : (g < 150 ? 'cell-bad' : '');
+        return `<tr>
+          <td>${w.wk}</td><td class="${gc(w.g1)}">${w.g1}</td><td class="${gc(w.g2)}">${w.g2}</td><td class="${gc(w.g3)}">${w.g3}</td>
+          <td style="font-weight:600">${w.scratch}</td>
+          <td class="${w.res === 'W' ? 'cell-win' : 'cell-loss'}" style="font-weight:700">${w.res}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  `;
+}
+
+// ===== PAGE 4: TEAM COMPARISON =====
+function buildP4() {
+  const wins = weeklyData.filter(w => w.result === 'W').length;
+  const losses = weeklyData.length - wins;
+  const winPct = Math.round((wins / weeklyData.length) * 100);
+  const avgPins = Math.round(weeklyData.reduce((s, w) => s + w.total, 0) / weeklyData.length);
+  document.getElementById('p4-subtitle').innerHTML = `Season ${wins}-${losses} &bull; Win% ${winPct}% &bull; Avg Pins ${avgPins.toLocaleString()}`;
+
+  // Opponent bar chart (sorted by wPct desc)
+  const sorted = [...opponentRecords].sort((a, b) => b.wPct - a.wPct);
+  makeChart('chartOppBars', {
+    type: 'bar',
+    data: {
+      labels: sorted.map(o => o.opp),
+      datasets: [{
+        label: 'Win %',
+        data: sorted.map(o => o.wPct),
+        backgroundColor: sorted.map(o => o.wPct === 100 ? 'rgba(0,230,118,.7)' : o.wPct === 0 ? 'rgba(255,82,82,.7)' : 'rgba(0,212,255,.5)'),
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1, callbacks: { label: ctx => `Win%: ${ctx.raw}% (${sorted[ctx.dataIndex].w}-${sorted[ctx.dataIndex].l})` } } },
+      scales: { x: { max: 100, grid: { color: 'rgba(58,58,92,.5)' } }, y: { grid: { display: false } } }
+    }
+  });
+
+  // Matchup table
+  buildP4Table();
+
+  // Callouts
+  const nemesis = opponentRecords.filter(o => o.wPct === 0);
+  const dominate = opponentRecords.filter(o => o.wPct === 100);
+  document.getElementById('p4-callouts').innerHTML = `
+    <div class="callout nemesis">
+      <div class="c-label">Nemesis</div>
+      ${nemesis.map(o => `<div class="c-team" style="color:var(--negative)">${o.opp} (0-${o.l})</div>`).join('')}
+    </div>
+    <div class="callout dominate">
+      <div class="c-label">Dominate</div>
+      ${dominate.map(o => `<div class="c-team" style="color:var(--positive)">${o.opp} (${o.w}-0)</div>`).join('')}
+    </div>
+  `;
+
+  buildP4Weekly();
+}
+
+function buildP4Table() {
+  document.getElementById('p4-table').innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Opponent</th><th>W</th><th>L</th><th>Win%</th><th>Avg Pins</th></tr></thead>
+      <tbody>${opponentRecords.map(o => {
+        const sel = p4SelectedOpp === o.opp;
+        return `<tr class="matchup-row ${sel ? 'selected' : ''}" onclick="selectOpp('${o.opp.replace(/'/g, "\\'")}')">
+          <td style="font-weight:600">${o.opp}</td>
+          <td class="cell-good">${o.w}</td>
+          <td class="cell-bad">${o.l}</td>
+          <td style="color:${o.wPct === 100 ? 'var(--positive)' : o.wPct === 0 ? 'var(--negative)' : 'var(--accent1)'}">${o.wPct}%</td>
+          <td>${o.avgPins.toLocaleString()}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  `;
+}
+
+function selectOpp(opp) {
+  p4SelectedOpp = p4SelectedOpp === opp ? null : opp;
+  buildP4Table();
+  buildP4Weekly();
+}
+
+function buildP4Weekly() {
+  let data = weeklyData;
+  const label = p4SelectedOpp ? ` (vs ${p4SelectedOpp})` : '';
+  document.getElementById('p4-filter-label').textContent = label;
+
+  if (p4SelectedOpp) {
+    // Match on partial name for opponents like "Queens Men" -> "All The Queens Men"
+    data = weeklyData.filter(w => w.opp.includes(p4SelectedOpp) || p4SelectedOpp.includes(w.opp.substring(0, 10)));
+  }
+
+  makeChart('chartP4Weekly', {
+    type: 'bar',
+    data: {
+      labels: data.map(w => 'Wk ' + w.wk),
+      datasets: [{
+        label: 'Team Total',
+        data: data.map(w => w.total),
+        backgroundColor: data.map(w => w.result === 'W' ? 'rgba(0,230,118,.7)' : 'rgba(255,82,82,.7)'),
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1, callbacks: { afterLabel: ctx => `${data[ctx.dataIndex].result} ${data[ctx.dataIndex].pts} vs ${data[ctx.dataIndex].opp}` } } },
+      scales: { y: { min: 1200, grid: { color: 'rgba(58,58,92,.5)' } }, x: { grid: { display: false } } }
+    }
+  });
+}
+
+// ===== PAGE 5: HEAD TO HEAD =====
+function buildH2HPills() {
+  const makeGroup = (containerId, selected, setter) => {
+    document.getElementById(containerId).innerHTML = bowlerNames.map(n => {
+      const c = activeBowlers[n].color;
+      const active = n === selected;
+      const other = containerId === 'h2h-pillsA' ? h2hB : h2hA;
+      const disabled = n === other;
+      return `<button class="pill ${active ? 'active' : ''}" style="${active ? `background:${c};border-color:${c}` : `border-color:${c}40;color:${disabled ? '#333' : c}`};${disabled ? 'opacity:.3;pointer-events:none' : ''}" onclick="${setter}('${n}')">${n.split(' ')[0]}</button>`;
+    }).join('');
+  };
+  makeGroup('h2h-pillsA', h2hA, 'setH2HA');
+  makeGroup('h2h-pillsB', h2hB, 'setH2HB');
+}
+function setH2HA(n) { h2hA = n; buildH2H(); }
+function setH2HB(n) { h2hB = n; buildH2H(); }
+
+function buildH2H() {
+  buildH2HPills();
+  const sA = h2hStats[h2hA], sB = h2hStats[h2hB];
+  const cA = activeBowlers[h2hA].color, cB = activeBowlers[h2hB].color;
+  const wA = activeBowlers[h2hA].weeks, wB = activeBowlers[h2hB].weeks;
+
+  // Weekly matchup dots - find common weeks
+  const wkMapA = {}; wA.forEach(w => wkMapA[w.wk] = w);
+  const wkMapB = {}; wB.forEach(w => wkMapB[w.wk] = w);
+  const commonWks = Object.keys(wkMapA).filter(k => wkMapB[k]).map(Number).sort((a, b) => a - b);
+
+  let aWins = 0, bWins = 0;
+  const dotsHtml = commonWks.map(wk => {
+    const sa = wkMapA[wk].scratch, sb = wkMapB[wk].scratch;
+    const winner = sa > sb ? 'A' : (sb > sa ? 'B' : 'T');
+    if (winner === 'A') aWins++; else if (winner === 'B') bWins++;
+    const bg = winner === 'A' ? cA : (winner === 'B' ? cB : 'var(--muted)');
+    return `<div class="h2h-dot" style="background:${bg}" title="Wk ${wk}: ${h2hA.split(' ')[0]} ${sa} vs ${h2hB.split(' ')[0]} ${sb}">${wk}</div>`;
+  }).join('');
+  document.getElementById('h2h-dots').innerHTML = `
+    <div style="width:100%;display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px">
+      <span style="color:${cA};font-weight:700">${h2hA.split(' ')[0]}: ${aWins}</span>
+      <span style="color:${cB};font-weight:700">${h2hB.split(' ')[0]}: ${bWins}</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${dotsHtml}</div>
+  `;
+
+  // Dumbbell stat comparison
+  const stats = [
+    { label: 'Season Avg', a: sA.avg, b: sB.avg, min: 150, max: 240 },
+    { label: 'High Game', a: sA.high, b: sB.high, min: 200, max: 300 },
+    { label: 'High Series', a: sA.hiSeries, b: sB.hiSeries, min: 550, max: 720 },
+    { label: '200+ Games', a: sA.over200, b: sB.over200, min: 0, max: 35 },
+    { label: 'Consistency', a: sA.consistency, b: sB.consistency, min: 15, max: 40, lowerBetter: true },
+    { label: 'Clutch', a: sA.clutch, b: sB.clutch, min: -5, max: 15 },
+    { label: 'Gm1 Avg', a: sA.g1avg, b: sB.g1avg, min: 150, max: 240 },
+    { label: 'Gm2 Avg', a: sA.g2avg, b: sB.g2avg, min: 150, max: 240 },
+    { label: 'Gm3 Avg', a: sA.g3avg, b: sB.g3avg, min: 150, max: 240 },
+  ];
+
+  document.getElementById('h2h-dumbbells').innerHTML = stats.map(s => {
+    const range = s.max - s.min;
+    const pctA = Math.max(0, Math.min(100, ((s.a - s.min) / range) * 100));
+    const pctB = Math.max(0, Math.min(100, ((s.b - s.min) / range) * 100));
+    const leftPct = Math.min(pctA, pctB);
+    const widthPct = Math.abs(pctA - pctB);
+    const better = s.lowerBetter ? (s.a < s.b ? 'A' : (s.b < s.a ? 'B' : 'T')) : (s.a > s.b ? 'A' : (s.b > s.a ? 'B' : 'T'));
+    return `<div class="dumbbell-row">
+      <div class="dumbbell-label">${s.label}</div>
+      <div class="dumbbell-val" style="color:${cA};text-align:right;${better === 'A' ? 'font-weight:800' : ''}">${s.a}</div>
+      <div class="dumbbell-bar">
+        <div class="dumbbell-line" style="left:${leftPct}%;width:${widthPct}%"></div>
+        <div class="dumbbell-marker" style="left:${pctA}%;background:${cA}"></div>
+        <div class="dumbbell-marker" style="left:${pctB}%;background:${cB}"></div>
+      </div>
+      <div class="dumbbell-val" style="color:${cB};text-align:left;${better === 'B' ? 'font-weight:800' : ''}">${s.b}</div>
+    </div>`;
+  }).join('');
+
+  // Weekly Average Overlay line chart
+  const allWksSet = new Set([...wA.map(w => w.wk), ...wB.map(w => w.wk)]);
+  const allWks = [...allWksSet].sort((a, b) => a - b);
+  makeChart('chartH2HOverlay', {
+    type: 'line',
+    data: {
+      labels: allWks.map(w => 'Wk ' + w),
+      datasets: [
+        {
+          label: h2hA.split(' ')[0],
+          data: allWks.map(wk => wkMapA[wk] ? Math.round((wkMapA[wk].g1 + wkMapA[wk].g2 + wkMapA[wk].g3) / 3) : null),
+          borderColor: cA, backgroundColor: cA + '20',
+          pointRadius: 3, borderWidth: 2, tension: 0.3, spanGaps: true
+        },
+        {
+          label: h2hB.split(' ')[0],
+          data: allWks.map(wk => wkMapB[wk] ? Math.round((wkMapB[wk].g1 + wkMapB[wk].g2 + wkMapB[wk].g3) / 3) : null),
+          borderColor: cB, backgroundColor: cB + '20',
+          pointRadius: 3, borderWidth: 2, tension: 0.3, spanGaps: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { boxWidth: 12 } }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1 } },
+      scales: { y: { grid: { color: 'rgba(58,58,92,.5)' } }, x: { grid: { display: false } } }
+    }
+  });
+
+  // Game Breakdown mini bars
+  makeChart('chartH2HBreakdown', {
+    type: 'bar',
+    data: {
+      labels: ['Game 1', 'Game 2', 'Game 3'],
+      datasets: [
+        { label: h2hA.split(' ')[0], data: [sA.g1avg, sA.g2avg, sA.g3avg], backgroundColor: cA + 'CC', borderRadius: 4 },
+        { label: h2hB.split(' ')[0], data: [sB.g1avg, sB.g2avg, sB.g3avg], backgroundColor: cB + 'CC', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { boxWidth: 12 } }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#3A3A5C', borderWidth: 1 } },
+      scales: { y: { min: 140, grid: { color: 'rgba(58,58,92,.5)' } }, x: { grid: { display: false } } }
+    }
+  });
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', async () => {
+  if (CONFIG.GOOGLE_SHEETS.enabled && CONFIG.GOOGLE_SHEETS.spreadsheetId !== 'YOUR_SPREADSHEET_ID_HERE') {
+    await fetchFromGoogleSheets();
+  } else {
+    await useFallbackData();
+  }
+  if (!allBowlers || Object.keys(allBowlers).length === 0) return; // bail if no data
+  activeBowlers = {};
+  for (const [name, b] of Object.entries(allBowlers)) {
+    activeBowlers[name] = { ...b };
+  }
+  applyFilters();
+  buildAllFilterBars();
+  bowlerNames = Object.keys(activeBowlers);
+  p2Bowler = bowlerNames[0];
+  p3Bowler = bowlerNames[0];
+  h2hA = bowlerNames[0];
+  h2hB = bowlerNames.length > 1 ? bowlerNames[1] : bowlerNames[0];
+  buildOverview();
+});
+</script>
+</body>
+</html>
